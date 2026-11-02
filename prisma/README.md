@@ -1,44 +1,44 @@
 # Database
 
-FloodGuard ships with **two** storage targets that share one logical model.
+FloodGuard uses **PostgreSQL** as its database engine. `prisma/schema.prisma`
+sets `provider = "postgresql"` and reads the connection string from
+`DATABASE_URL`. The deployed app (Vercel) points at a **Neon** PostgreSQL
+instance; local development can point at any reachable PostgreSQL URL.
 
-## Development / demo / tests — SQLite
+## Connection string
 
-`prisma/schema.prisma` uses `provider = "sqlite"` and `DATABASE_URL="file:./dev.db"`.
-This is persistent **file** storage (not in-memory), so the app and the test
-suite run with zero database setup.
+Use the **pooled** Neon connection string in `.env` and in the Vercel project
+settings. It looks like:
 
-```bash
-cp .env.example .env      # DATABASE_URL is already set for SQLite
-npm run db:push           # create the schema in prisma/dev.db
-npm run db:seed           # load clearly-labelled SIMULATED demo data
+```
+DATABASE_URL="postgresql://USER:PASSWORD@HOST-pooler.REGION.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 ```
 
-## Production — PostgreSQL
+- Use the `-pooler` host for serverless/Vercel (bounded connection count).
+- Never commit the real string — `.env` is gitignored; `.env.example` has a
+  placeholder.
 
-The full production DDL lives at [`../db/postgres/0001_init.sql`](../db/postgres/0001_init.sql)
-(primary/foreign keys, unique device ids, timestamps, indexes, CHECK validation,
-duplicate-packet unique constraint).
+## Applying the schema (does not delete data)
 
-To make Prisma manage a Postgres database directly:
+Migrations are version-controlled under `prisma/migrations/`. The initial
+migration (`20260101000000_init`) creates all tables, keys, indexes and the
+`@@unique([deviceId, packetSequence])` duplicate-packet guard.
 
-1. Change the datasource provider:
+```bash
+npx prisma migrate deploy   # applies pending migrations to DATABASE_URL
+```
 
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
-   ```
+`migrate deploy` is additive/idempotent for an empty database and never drops
+existing data. For local iteration you can instead use `npx prisma migrate dev`.
 
-2. Set a Postgres connection string in `.env`:
+A hand-written reference DDL also lives at
+[`../db/postgres/0001_init.sql`](../db/postgres/0001_init.sql).
 
-   ```
-   DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/floodguard?schema=public"
-   ```
+## Optional demo data
 
-3. Either apply the hand-written migration (`psql "$DATABASE_URL" -f db/postgres/0001_init.sql`)
-   or generate/apply a Prisma migration (`prisma migrate dev --name init`).
+```bash
+npm run db:seed             # clearly-labelled SIMULATED demo data (optional)
+```
 
 ## Data-quality rules encoded in the model
 

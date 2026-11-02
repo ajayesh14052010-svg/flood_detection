@@ -13,7 +13,7 @@ Water-level sensor
   → SX1278 LoRa 433 MHz (receiver)
   → ESP32-2 (gateway, ID: FG-GATEWAY-002)  [SIM800L GSM + NEO-6M GPS]
   → Authenticated backend API  (POST /api/v1/devices/readings)
-  → Database  (SQLite for dev/demo, PostgreSQL for production)
+  → Database  (PostgreSQL — Neon)
   → FloodGuard website (public dashboard + admin console)
 ```
 
@@ -54,7 +54,7 @@ These constraints are enforced in code and surfaced in the UI:
 | Styling | Tailwind CSS 3.4 |
 | Map | Leaflet + react-leaflet + OpenStreetMap tiles |
 | Charts | Recharts |
-| ORM / DB | Prisma 6 → SQLite (dev/demo) · PostgreSQL (production DDL provided) |
+| ORM / DB | Prisma 6 → PostgreSQL (Neon in production; any Postgres URL locally) |
 | Validation | Zod |
 | Admin sessions | `jose` (HS256 signed cookie) |
 | Crypto | Node `crypto` — scrypt password hashing, SHA-256 peppered device-token hashing, `timingSafeEqual` |
@@ -72,19 +72,22 @@ npm install
 
 # 2. Create your local environment file (never commit .env)
 cp .env.example .env
-#    Then set real AUTH_SECRET and DEVICE_TOKEN_SECRET values.
+#    Set DATABASE_URL to a PostgreSQL/Neon connection string, plus real
+#    AUTH_SECRET and DEVICE_TOKEN_SECRET values.
 
-# 3. Generate Prisma client, create the SQLite DB, seed demo data
-npm run setup        # = prisma generate && prisma db push && npm run db:seed
+# 3. Generate Prisma client, apply migrations, seed demo data
+npm run setup        # = prisma generate && prisma migrate deploy && npm run db:seed
 
 # 4. Run the site
 npm run dev          # http://localhost:3000
 ```
 
-The seed creates a `FG-GATEWAY-002` gateway, six sensors, three 50 m zones,
-thresholds, two demo alerts, and the bootstrap admin. Device tokens and the
-gateway/sensor IDs are printed to the console during seeding — **these are
-development-only values and are not committed.**
+The seed is optional — the dashboard renders correctly against an empty
+database ("Waiting for sensor data"). When run, it creates a `FG-GATEWAY-002`
+gateway, six sensors, three 50 m zones, thresholds, two demo alerts, and the
+bootstrap admin. Device tokens and the gateway/sensor IDs are printed to the
+console during seeding — **these are development-only values and are not
+committed.**
 
 Demo admin login (local only): `admin@example.local` / `change-me-admin-password`
 (set via `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env`). **Change these for any
@@ -208,14 +211,15 @@ Prisma models (`prisma/schema.prisma`): `Gateway`, `Device`, `Reading`, `Zone`,
 unique device/gateway/zone IDs, timestamps, indexes, and a
 `@@unique([deviceId, packetSequence])` guard for duplicate packets.
 
-- **Development / demo:** SQLite (`DATABASE_URL="file:./dev.db"`). Zero-install,
-  used by the seed and the test suite.
-- **Production:** PostgreSQL. A hand-authored migration is provided at
-  `db/postgres/0001_init.sql` (SERIAL/BIGSERIAL keys, `CHECK` constraints for
-  statuses, `DOUBLE PRECISION`, `TIMESTAMPTZ`, indexes, unique constraints).
-  See `prisma/README.md` for the provider switch.
+- **Engine:** PostgreSQL. `schema.prisma` uses `provider = "postgresql"` and
+  reads `DATABASE_URL`. The deployed app uses a **Neon** PostgreSQL instance
+  (pooled connection string); local dev can use any reachable Postgres URL.
+- **Migrations:** version-controlled in `prisma/migrations/`. Apply to a
+  database without dropping data via `npm run db:migrate`
+  (`prisma migrate deploy`). A hand-written reference DDL also lives at
+  `db/postgres/0001_init.sql`. See `prisma/README.md`.
 
-`prisma/dev.db` and all `*.db` files are gitignored.
+Any local `*.db` files (from earlier SQLite-based prototypes) are gitignored.
 
 ---
 

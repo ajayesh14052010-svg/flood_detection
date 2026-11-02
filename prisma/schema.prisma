@@ -1,25 +1,24 @@
 // FloodGuard Prisma schema.
 //
-// LOCAL DEV / DEMO / TESTS use SQLite (zero install) so the app runs and is
-// testable without a database server. This is persistent FILE storage, not
-// in-memory — historical readings survive restarts.
+// PRODUCTION uses PostgreSQL (Neon). The datasource provider below is
+// "postgresql" and the connection string comes from the DATABASE_URL
+// environment variable — never hardcoded. See prisma/README.md and the repo
+// README for Neon + Vercel setup.
 //
-// PRODUCTION uses PostgreSQL. To switch:
-//   1. Set provider = "postgresql" below (see prisma/README.md).
-//   2. Point DATABASE_URL at your Postgres instance.
-//   3. Either `prisma migrate deploy` (after generating a postgres migration)
-//      or apply the hand-written DDL in db/postgres/0001_init.sql.
+// Sync the schema to a (new) Neon database without touching existing data:
+//   npx prisma migrate deploy      # applies prisma/migrations/*
+//   # or, for a throwaway/dev database:  npx prisma db push
 //
 // The models are written to be portable: statuses are Strings with
-// application-level validation (SQLite does not support Prisma enums),
-// coordinates/levels are Float, and no provider-specific @db types are used.
+// application-level validation, coordinates/levels are Float, and no
+// provider-specific @db types are used.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
