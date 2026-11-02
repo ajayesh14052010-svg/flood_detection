@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: #f8fafc;
+  color: #0f172a;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Leaflet container must have an explicit height for tiles to render. */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  z-index: 0;
+}
+
+.card {
+  @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+}

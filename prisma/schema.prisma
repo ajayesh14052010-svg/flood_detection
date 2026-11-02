@@ -1,0 +1,199 @@
+// FloodGuard Prisma schema.
+//
+// LOCAL DEV / DEMO / TESTS use SQLite (zero install) so the app runs and is
+// testable without a database server. This is persistent FILE storage, not
+// in-memory — historical readings survive restarts.
+//
+// PRODUCTION uses PostgreSQL. To switch:
+//   1. Set provider = "postgresql" below (see prisma/README.md).
+//   2. Point DATABASE_URL at your Postgres instance.
+//   3. Either `prisma migrate deploy` (after generating a postgres migration)
+//      or apply the hand-written DDL in db/postgres/0001_init.sql.
+//
+// The models are written to be portable: statuses are Strings with
+// application-level validation (SQLite does not support Prisma enums),
+// coordinates/levels are Float, and no provider-specific @db types are used.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// --- Gateways (ESP32-2 and any additional gateway) ------------------------
+model Gateway {
+  id              Int      @id @default(autoincrement())
+  gatewayId       String   @unique // e.g. "FG-GATEWAY-002"
+  name            String
+  firmwareVersion String?
+  lastReportedIp  String? // diagnostic only; never an auth credential
+  status          String   @default("UNKNOWN") // ONLINE | OFFLINE | UNKNOWN
+  isOnline        Boolean  @default(false)
+  lastSeenAt      DateTime?
+  latitude        Float? // NEO-6M GPS on the gateway
+  longitude       Float?
+  gpsFix          Boolean  @default(false)
+  batteryVoltage  Float?
+  loraRssi        Int?
+  loraSnr         Float?
+  packetsReceived Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  devices  Device[]
+  readings Reading[]
+
+  @@index([status])
+}
+
+// --- Sensor nodes (ESP32-1 + water-level sensor over LoRa) ----------------
+model Device {
+  id            Int     @id @default(autoincrement())
+  deviceId      String  @unique // e.g. "FG-SENSOR-001"
+  name          String
+  status        String  @default("UNKNOWN") // last computed flood status
+  isOnline      Boolean @default(false)
+  lastSeenAt    DateTime?
+  lastPacketSeq Int     @default(0)
+
+  // Device authentication. The raw token is never stored — only a SHA-256
+  // hash — and never exposed on the public dashboard.
+  tokenHash   String
+  tokenPrefix String // first 8 chars, shown to admins for identification
+
+  // Location. If a sensor has no verified location it stays null and the UI
+  // shows "Location unavailable". locationSource distinguishes real sensor
+  // GPS from a manual assignment and from gateway-derived coordinates.
+  latitude       Float?
+  longitude      Float?
+  hasLocation    Boolean @default(false)
+  locationSource String? // GPS | MANUAL | null
+
+  calibrationConfigured Boolean @default(false)
+  calibrationSlope      Float   @default(1)
+  calibrationIntercept  Float   @default(0)
+
+  gatewayId Int?
+  gateway   Gateway? @relation(fields: [gatewayId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  readings        Reading[]
+  zoneAssignments ZoneSensor[]
+  alerts          Alert[]
+
+  @@index([gatewayId])
+  @@index([status])
+}
+
+// --- Individual readings --------------------------------------------------
+model Reading {
+  id Int @id @default(autoincrement())
+
+  deviceId  Int
+  device    Device  @relation(fields: [deviceId], references: [id])
+  gatewayId Int?
+  gateway   Gateway? @relation(fields: [gatewayId], references: [id])
+
+  rawSensorValue        Int // raw ADC / sensor value (NOT centimetres)
+  calibratedWaterLevelCm Float? // null until calibration is configured
+  waterFlowLpm          Float? // null unless a real flow sensor/model exists
+  flowSource            String? // MEASURED | ESTIMATED | null
+
+  floodStatus  String // NORMAL | WATCH | WARNING | CRITICAL | CALIBRATION_REQUIRED ...
+  dataQuality  String @default("OK") // OK | STALE | UNVERIFIED_LOCATION | ...
+
+  latitude  Float?
+  longitude Float?
+
+  batteryVoltage Float?
+  loraRssi       Int?
+  loraSnr        Float?
+
+  packetSequence  Int
+  firmwareVersion String?
+  simulated       Boolean @default(false)
+
+  reportedAt DateTime? // device-side timestamp, if provided
+  receivedAt DateTime  @default(now()) // server reception timestamp
+
+  // Duplicate-packet protection at the storage layer as well as the service.
+  @@unique([deviceId, packetSequence])
+  @@index([deviceId, receivedAt])
+  @@index([floodStatus])
+}
+
+// --- Monitoring zones (fixed-radius circles, NOT admin wards) -------------
+model Zone {
+  id           Int     @id @default(autoincrement())
+  zoneId       String  @unique // e.g. "FG-ZONE-001"
+  name         String
+  centerLat    Float
+  centerLng    Float
+  radiusMeters Int     @default(50)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignments ZoneSensor[]
+
+  @@index([zoneId])
+}
+
+// Many-to-many between zones and devices, with the computed distance kept so
+// overlapping zones can be reconciled without duplicating a reading.
+model ZoneSensor {
+  id            Int  @id @default(autoincrement())
+  zoneId        Int
+  zone          Zone @relation(fields: [zoneId], references: [id])
+  deviceId      Int
+  device        Device @relation(fields: [deviceId], references: [id])
+  distanceMeters Float
+
+  @@unique([zoneId, deviceId])
+  @@index([deviceId])
+}
+
+// --- Alerts ---------------------------------------------------------------
+model Alert {
+  id        Int      @id @default(autoincrement())
+  deviceId  Int?
+  device    Device?  @relation(fields: [deviceId], references: [id])
+  zoneRef   Int?
+  type      String // WARNING | CRITICAL | SENSOR_OFFLINE | DATA_STALE
+  severity  String // INFO | WARNING | CRITICAL
+  message   String
+  valueCm   Float?
+  valueRaw  Int?
+
+  acknowledged   Boolean   @default(false)
+  acknowledgedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([acknowledged])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// --- Administrator accounts ----------------------------------------------
+model Admin {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+// --- Configurable flood thresholds ---------------------------------------
+// Key/value table the admin can tune per installation. Values are read by the
+// classification logic. Types (cm thresholds, seconds) are documented in lib.
+model ThresholdConfig {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     Float
+  updatedAt DateTime @updatedAt
+}

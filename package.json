@@ -1,0 +1,59 @@
+{
+  "name": "floodguard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FloodGuard — IoT-based flood monitoring and community alert platform.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "setup": "prisma generate && prisma db push && npm run db:seed"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.5.0",
+    "jose": "^5.9.6",
+    "leaflet": "^1.9.4",
+    "next": "^15.2.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-leaflet": "^5.0.0",
+    "recharts": "^2.15.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.14",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^15.2.4",
+    "postcss": "^8.4.49",
+    "prisma": "^6.5.0",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "allowScripts": {
+    "@prisma/engines@6.19.3": true,
+    "prisma@6.19.3": true,
+    "@prisma/client@6.19.3": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.21.5": true
+  }
+}
