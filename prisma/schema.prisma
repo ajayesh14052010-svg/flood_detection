@@ -19,6 +19,13 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // DATABASE_URL is the pooled Neon connection used by the running app AND by
+  // `prisma generate` at build time. It is the ONLY variable required for the
+  // app to build and run. (For running migrations from a CLI you may point a
+  // separate direct, non-pooler URL at DATABASE_URL — see prisma/README.md.
+  // We intentionally do NOT reference a DIRECT_URL env var in the schema,
+  // because Prisma's validate/generate fail with P1012 if it is unset, which
+  // would break the Vercel build.)
   url      = env("DATABASE_URL")
 }
 

@@ -2,7 +2,7 @@
 // The gateway is identified by its unique id, never its IP. The IP is shown for
 // diagnostics only.
 import type { NextRequest } from "next/server";
-import { ok, fail } from "@/lib/http";
+import { ok, fail, handleRouteError } from "@/lib/http";
 import { getGatewayDiagnostics } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -13,7 +13,11 @@ export async function GET(
   { params }: { params: Promise<{ gatewayId: string }> }
 ) {
   const { gatewayId } = await params;
-  const diag = await getGatewayDiagnostics(decodeURIComponent(gatewayId));
-  if (!diag) return fail(404, "gateway_not_found");
-  return ok(diag);
+  try {
+    const diag = await getGatewayDiagnostics(decodeURIComponent(gatewayId));
+    if (!diag) return fail(404, "gateway_not_found");
+    return ok(diag);
+  } catch (err) {
+    return handleRouteError(err);
+  }
 }

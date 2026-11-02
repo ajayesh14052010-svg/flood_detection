@@ -5,7 +5,7 @@
 // Device tokens are never logged or echoed. Errors are generic.
 
 import type { NextRequest } from "next/server";
-import { ok, fail, deviceTokenFromRequest } from "@/lib/http";
+import { ok, fail, deviceTokenFromRequest, handleRouteError } from "@/lib/http";
 import { validateReadingPayload } from "@/lib/validation";
 import { authenticateDevice } from "@/lib/deviceAuth";
 import { ingestReading } from "@/lib/ingest";
@@ -36,21 +36,22 @@ export async function POST(req: NextRequest) {
   const payload = validation.data;
 
   const token = deviceTokenFromRequest(req);
-  const device = await authenticateDevice(payload.device_id, token);
-  if (!device) {
-    // Do not reveal whether the device exists or the token is wrong.
-    return fail(401, "unauthorized");
-  }
-
-  // Resolve the gateway row (diagnostic only; ingestion tolerates an unknown id).
-  const gateway = await prisma.gateway.findUnique({
-    where: { gatewayId: payload.gateway_id },
-    select: { id: true },
-  });
-
-  const reportedIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
 
   try {
+    const device = await authenticateDevice(payload.device_id, token);
+    if (!device) {
+      // Do not reveal whether the device exists or the token is wrong.
+      return fail(401, "unauthorized");
+    }
+
+    // Resolve the gateway row (diagnostic only; ingestion tolerates an unknown id).
+    const gateway = await prisma.gateway.findUnique({
+      where: { gatewayId: payload.gateway_id },
+      select: { id: true },
+    });
+
+    const reportedIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+
     const result = await ingestReading(
       payload,
       device,
@@ -66,7 +67,10 @@ export async function POST(req: NextRequest) {
       calibrated_water_level_cm: result.calibratedCm,
       alert_created: result.alertCreated,
     });
-  } catch {
-    return fail(500, "internal_error");
+  } catch (err) {
+    // A database outage here must not surface as a generic 500 with a Prisma
+    // message (which can contain the connection string); handleRouteError maps
+    // connection failures to a safe 503 and other faults to a generic 500.
+    return handleRouteError(err);
   }
 }

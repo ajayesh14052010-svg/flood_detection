@@ -4,7 +4,7 @@
 // persisted in plaintext or exposed on public endpoints.
 
 import type { NextRequest } from "next/server";
-import { ok, fail } from "@/lib/http";
+import { ok, fail, handleRouteError } from "@/lib/http";
 import { getAdminFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { generateDeviceToken, hashDeviceToken, tokenPrefix } from "@/lib/crypto";
@@ -30,42 +30,46 @@ export async function POST(req: NextRequest) {
   }
   const d = parsed.data;
 
-  const existing = await prisma.device.findUnique({ where: { deviceId: d.device_id } });
-  if (existing) return fail(409, "device_exists");
+  try {
+    const existing = await prisma.device.findUnique({ where: { deviceId: d.device_id } });
+    if (existing) return fail(409, "device_exists");
 
-  let gatewayId: number | null = null;
-  if (d.gateway_id) {
-    const gw = await prisma.gateway.findUnique({ where: { gatewayId: d.gateway_id } });
-    if (!gw) return fail(422, "unknown_gateway");
-    gatewayId = gw.id;
+    let gatewayId: number | null = null;
+    if (d.gateway_id) {
+      const gw = await prisma.gateway.findUnique({ where: { gatewayId: d.gateway_id } });
+      if (!gw) return fail(422, "unknown_gateway");
+      gatewayId = gw.id;
+    }
+
+    const token = generateDeviceToken();
+    const hasLocation = d.latitude != null && d.longitude != null;
+    const device = await prisma.device.create({
+      data: {
+        deviceId: d.device_id,
+        name: d.name,
+        gatewayId,
+        tokenHash: hashDeviceToken(token, env.DEVICE_TOKEN_SECRET),
+        tokenPrefix: tokenPrefix(token),
+        latitude: d.latitude ?? null,
+        longitude: d.longitude ?? null,
+        hasLocation,
+        locationSource: hasLocation ? "MANUAL" : null,
+        status: "UNKNOWN",
+        calibrationConfigured: false,
+      },
+    });
+
+    return ok(
+      {
+        ok: true,
+        device_id: device.deviceId,
+        // One-time secret. Shown only to the authenticated admin, once.
+        device_token: token,
+        note: "Store this token securely on the device. It will not be shown again.",
+      },
+      { status: 201 }
+    );
+  } catch (err) {
+    return handleRouteError(err);
   }
-
-  const token = generateDeviceToken();
-  const hasLocation = d.latitude != null && d.longitude != null;
-  const device = await prisma.device.create({
-    data: {
-      deviceId: d.device_id,
-      name: d.name,
-      gatewayId,
-      tokenHash: hashDeviceToken(token, env.DEVICE_TOKEN_SECRET),
-      tokenPrefix: tokenPrefix(token),
-      latitude: d.latitude ?? null,
-      longitude: d.longitude ?? null,
-      hasLocation,
-      locationSource: hasLocation ? "MANUAL" : null,
-      status: "UNKNOWN",
-      calibrationConfigured: false,
-    },
-  });
-
-  return ok(
-    {
-      ok: true,
-      device_id: device.deviceId,
-      // One-time secret. Shown only to the authenticated admin, once.
-      device_token: token,
-      note: "Store this token securely on the device. It will not be shown again.",
-    },
-    { status: 201 }
-  );
 }
