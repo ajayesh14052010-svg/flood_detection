@@ -88,7 +88,18 @@ export default async function SensorDetailPage({
         </Card>
       </div>
 
-      <Card title="History" subtitle={`${history.length} readings`}>
+      <Card
+        title="History"
+        subtitle={`${history.length} readings`}
+      >
+        <div className="mb-3 -mt-1 flex justify-end">
+          <a
+            href={`/api/v1/sensors/${encodeURIComponent(sensor.deviceId)}/history`}
+            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Export history (CSV)
+          </a>
+        </div>
         <HistoryChartsLazy data={data} calibrated={sensor.calibrationConfigured} hasFlow={data.some((d) => d.flow != null)} />
       </Card>
     </div>

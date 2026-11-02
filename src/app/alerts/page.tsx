@@ -11,12 +11,20 @@ export default async function AlertsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Alerts</h1>
-        <p className="text-sm text-slate-500">
-          Flood warnings, critical alerts, offline sensors and stale data. Readings marked
-          SIMULATED are demo data.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Alerts</h1>
+          <p className="text-sm text-slate-500">
+            Flood warnings, critical alerts, offline sensors and stale data. Readings marked
+            SIMULATED are demo data.
+          </p>
+        </div>
+        <a
+          href="/api/v1/alerts/export"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Download CSV
+        </a>
       </div>
 
       <Card>

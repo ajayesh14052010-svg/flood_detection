@@ -15,7 +15,8 @@ import {
   Popup,
   Tooltip,
 } from "react-leaflet";
-import { statusColor } from "@/lib/format";
+import { statusColor, statusLabel } from "@/lib/format";
+import { FLOOD_STATUS } from "@/lib/types";
 
 interface SnapshotSensor {
   deviceId: string;
@@ -159,6 +160,35 @@ export default function FloodMap({ initial }: { initial: LiveSnapshotData }) {
             ) : null
           )}
         </MapContainer>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-600">
+        <span className="font-medium text-slate-700">Legend:</span>
+        {[
+          FLOOD_STATUS.NORMAL,
+          FLOOD_STATUS.WATCH,
+          FLOOD_STATUS.WARNING,
+          FLOOD_STATUS.CRITICAL,
+          FLOOD_STATUS.DATA_STALE,
+          FLOOD_STATUS.SENSOR_OFFLINE,
+          FLOOD_STATUS.CALIBRATION_REQUIRED,
+        ].map((st) => (
+          <span key={st} className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block h-3 w-3 rounded-full ring-1 ring-white"
+              style={{ backgroundColor: statusColor(st) }}
+            />
+            {statusLabel(st)}
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full bg-sky-500 ring-1 ring-white" />
+          Gateway
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full border border-sky-600 bg-sky-300/30" />
+          50 m zone
+        </span>
       </div>
     </div>
   );

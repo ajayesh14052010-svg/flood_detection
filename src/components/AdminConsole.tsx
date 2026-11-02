@@ -48,6 +48,7 @@ export default function AdminConsole({ email }: { email: string }) {
   const [token, setToken] = useState<string | null>(null);
 
   const [cal, setCal] = useState({ deviceId: "", configured: true, slope: "0.02", intercept: "0", latitude: "", longitude: "" });
+  const [previewRaw, setPreviewRaw] = useState("3500");
   const [thr, setThr] = useState({ watch_cm: "30", warning_cm: "60", critical_cm: "100", stale_seconds: "900" });
   const [zone, setZone] = useState({ zone_id: "FG-ZONE-004", name: "", center_lat: "13.0827", center_lng: "80.27", radius_meters: "50" });
 
@@ -206,6 +207,41 @@ export default function AdminConsole({ email }: { email: string }) {
             <Field label="Latitude"><input className={input} value={cal.latitude} onChange={(e) => setCal({ ...cal, latitude: e.target.value })} /></Field>
             <Field label="Longitude"><input className={input} value={cal.longitude} onChange={(e) => setCal({ ...cal, longitude: e.target.value })} /></Field>
           </div>
+
+          {/* Live calibration preview — computed in-browser, nothing is saved. */}
+          <div className="rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600">
+            <div className="mb-1 font-semibold text-slate-700">Preview (not saved)</div>
+            <div className="flex items-center gap-2">
+              <span>raw</span>
+              <input
+                className={`${input} w-24`}
+                value={previewRaw}
+                onChange={(e) => setPreviewRaw(e.target.value)}
+                inputMode="numeric"
+              />
+              <span>→</span>
+              <span className="font-mono text-slate-800">
+                {(() => {
+                  const raw = Number(previewRaw);
+                  const slope = Number(cal.slope);
+                  const intercept = Number(cal.intercept);
+                  if (!cal.configured || !Number.isFinite(raw) || !Number.isFinite(slope) || !Number.isFinite(intercept)) {
+                    return "calibration required";
+                  }
+                  const cm = Math.max(0, slope * raw + intercept);
+                  const watch = Number(thr.watch_cm);
+                  const warning = Number(thr.warning_cm);
+                  const critical = Number(thr.critical_cm);
+                  const status =
+                    Number.isFinite(critical) && cm >= critical ? "CRITICAL" :
+                    Number.isFinite(warning) && cm >= warning ? "WARNING" :
+                    Number.isFinite(watch) && cm >= watch ? "WATCH" : "NORMAL";
+                  return `${cm.toFixed(1)} cm · ${status}`;
+                })()}
+              </span>
+            </div>
+          </div>
+
           <button className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-700">Save</button>
         </form>
 

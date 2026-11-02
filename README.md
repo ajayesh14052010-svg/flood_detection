@@ -95,11 +95,27 @@ non-local deployment.**
 ```bash
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
-npm test             # Vitest (37 tests)
-npm run build        # production build
+npm test             # Vitest (41 tests)
+npm run build        # production build (runs `prisma generate` first)
 npm run start        # serve the production build
 npm run db:studio    # Prisma Studio (inspect the DB)
 ```
+
+### Troubleshooting
+
+**`@prisma/client did not initialize yet. Please run "prisma generate"`**
+This happens on a fresh clone when the Prisma Client has not been generated.
+`npm install` now runs `prisma generate` automatically (via a `postinstall`
+script), and `npm run build` regenerates it too. If you still see it — for
+example because your package manager blocks lifecycle scripts — run:
+
+```bash
+npx prisma generate
+```
+
+If your npm config blocks `postinstall`, approve the Prisma engine scripts
+(`npm approve-scripts @prisma/engines prisma @prisma/client`) or just run
+`npx prisma generate` manually before `npm run dev`.
 
 ---
 
@@ -162,6 +178,10 @@ only when severity increases.
 `GET /api/v1/live` · `/summary` · `/sensors` · `/sensors/[deviceId]` ·
 `/zones` · `/alerts` · `/gateways/[gatewayId]`
 
+**CSV exports (public):** `GET /api/v1/alerts/export` (all alerts) and
+`GET /api/v1/sensors/[deviceId]/history` (a sensor's stored readings) return
+downloadable `.csv` files.
+
 ### Admin (cookie-session authenticated)
 
 `POST /api/v1/admin/login` · `/logout` · `GET /session` ·
@@ -169,6 +189,11 @@ only when severity increases.
 `PUT /api/v1/admin/devices/[deviceId]/calibration` ·
 `PUT /api/v1/admin/devices/thresholds` ·
 `POST /api/v1/admin/zones` · `POST /api/v1/admin/alerts/[id]/ack`
+
+**Gateway heartbeat:** `POST /api/v1/gateways/[gatewayId]/heartbeat` (admin
+session) marks a gateway online and records gateway-level telemetry (GPS,
+battery, LoRa RSSI/SNR, firmware, last-reported IP) independently of any sensor
+reading. The gateway is identified by its unique ID, never its IP.
 
 Access control is enforced on the backend, not merely by hiding UI buttons.
 Device registration returns the plaintext token exactly once; only its hashed
