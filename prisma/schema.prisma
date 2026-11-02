@@ -19,14 +19,15 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // DATABASE_URL is the pooled Neon connection used by the running app AND by
-  // `prisma generate` at build time. It is the ONLY variable required for the
-  // app to build and run. (For running migrations from a CLI you may point a
-  // separate direct, non-pooler URL at DATABASE_URL — see prisma/README.md.
-  // We intentionally do NOT reference a DIRECT_URL env var in the schema,
-  // because Prisma's validate/generate fail with P1012 if it is unset, which
-  // would break the Vercel build.)
-  url      = env("DATABASE_URL")
+  // DATABASE_URL — Neon POOLED connection. Used by the running app (serverless
+  // friendly: the pooler bounds concurrent connections) and by `prisma generate`.
+  // DIRECT_URL — Neon DIRECT (non-pooler) connection. Used only by the Prisma
+  // CLI for `migrate` / `db` commands, which need a session the pooler does not
+  // provide. Both must be defined in the environment (local .env and Vercel):
+  // Prisma's validate/generate fail with P1012 if a referenced env var is unset.
+  // Neither value is ever hardcoded here or committed.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // --- Gateways (ESP32-2 and any additional gateway) ------------------------

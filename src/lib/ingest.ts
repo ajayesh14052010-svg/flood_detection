@@ -1,8 +1,8 @@
 // Sensor-reading ingestion service.
 //
 // This is the single place where a device payload becomes a persisted,
-// classified reading. It is framework-free (no `next/*` imports) so it can be
-// unit-tested directly against a throwaway SQLite database.
+// classified reading. It is framework-free (no `next/*` imports) so its pure
+// helpers can be unit-tested without a database connection.
 //
 // Responsibilities:
 //   • duplicate-packet detection (per-device monotonic sequence + unique index)
