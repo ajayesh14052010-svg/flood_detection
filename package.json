@@ -4,9 +4,9 @@
   "private": true,
   "description": "FloodGuard — IoT-based flood monitoring and community alert platform.",
   "scripts": {
-    "dev": "next dev",
+    "dev": "prisma generate && next dev",
     "build": "prisma generate && next build",
-    "start": "next start",
+    "start": "prisma generate && next start",
     "postinstall": "prisma generate",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
