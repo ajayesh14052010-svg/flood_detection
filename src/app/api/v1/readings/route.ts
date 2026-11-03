@@ -23,6 +23,8 @@ export const dynamic = "force-dynamic";
 
 // device/gateway ids: prefixed identifier, e.g. FG-SENSOR-001
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$/;
+// packetSequence is stored in a Postgres INT (32-bit signed) column.
+const MAX_PACKET_SEQUENCE = 2_147_483_647;
 
 type Obj = Record<string, unknown>;
 
@@ -59,7 +61,9 @@ function toBool(v: unknown): boolean | undefined {
  * Translate a flexible device payload into the canonical ReadingPayload.
  * Returns an error string on the first unrecoverable problem.
  */
-function mapToReadingPayload(body: Obj): { payload?: ReadingPayload; error?: string } {
+function mapToReadingPayload(
+  body: Obj
+): { payload?: ReadingPayload; seqProvided?: boolean; error?: string } {
   const deviceId = pick(body, ["device_id", "deviceId", "device"]);
   if (typeof deviceId !== "string" || !ID_PATTERN.test(deviceId)) {
     return { error: "device_id: a non-empty identifier is required" };
@@ -77,14 +81,19 @@ function mapToReadingPayload(body: Obj): { payload?: ReadingPayload; error?: str
   if (raw < 0) raw = 0;
   raw = Math.min(1_000_000, Math.round(raw));
 
-  // A per-device monotonic sequence. If the device does not send one, derive it
-  // from the (epoch-ms) timestamp so successive posts stay strictly increasing.
-  let seq = toNumber(pick(body, ["packet_sequence", "packetSequence", "seq", "sequence"]));
-  if (seq === undefined) {
-    const ts = toNumber(pick(body, ["timestamp", "ts", "time"]));
-    seq = ts !== undefined && ts > 1e9 ? Math.floor(ts) : Date.now();
+  // Per-device monotonic sequence. If the device sends one, validate it fits the
+  // INT column; otherwise the caller assigns lastPacketSeq + 1 (never epoch
+  // time — a millisecond timestamp overflows 32-bit and fails the insert).
+  let seq: number | undefined = toNumber(
+    pick(body, ["packet_sequence", "packetSequence", "seq", "sequence"])
+  );
+  const seqProvided = seq !== undefined;
+  if (seq !== undefined) {
+    seq = Math.floor(seq);
+    if (seq < 0 || seq > MAX_PACKET_SEQUENCE) {
+      return { error: "packet_sequence: must be between 0 and 2147483647" };
+    }
   }
-  seq = Math.max(0, Math.floor(seq));
 
   // Optional calibrated centimetres — the pipeline only trusts these once the
   // device's calibration is configured (so we never claim cm from a raw value).
@@ -108,7 +117,7 @@ function mapToReadingPayload(body: Obj): { payload?: ReadingPayload; error?: str
     device_id: deviceId,
     gateway_id: gatewayId,
     raw_sensor_value: raw,
-    packet_sequence: seq,
+    packet_sequence: seq ?? 0, // overwritten with lastPacketSeq + 1 when not provided
     simulated: simulated ?? false,
   };
   if (calibratedCm !== undefined && calibratedCm >= 0) payload.calibrated_water_level_cm = calibratedCm;
@@ -120,7 +129,7 @@ function mapToReadingPayload(body: Obj): { payload?: ReadingPayload; error?: str
   if (snr !== undefined && snr >= -50 && snr <= 50) payload.lora_snr = snr;
   if (typeof fwRaw === "string" && fwRaw.length <= 32) payload.firmware_version = fwRaw;
 
-  return { payload };
+  return { payload, seqProvided };
 }
 
 export async function POST(req: NextRequest) {
@@ -148,6 +157,19 @@ export async function POST(req: NextRequest) {
     if (!device) {
       // Do not reveal whether the device exists or the token is wrong.
       return fail(401, "unauthorized");
+    }
+
+    // Assign a server-side monotonic sequence when the device did not send one.
+    // (Never epoch milliseconds — that overflows the INT packetSequence column.)
+    if (!mapped.seqProvided) {
+      const current = await prisma.device.findUnique({
+        where: { id: device.id },
+        select: { lastPacketSeq: true },
+      });
+      payload.packet_sequence = Math.min(
+        MAX_PACKET_SEQUENCE,
+        (current?.lastPacketSeq ?? 0) + 1
+      );
     }
 
     let gateway: { id: number } | null = null;
@@ -180,14 +202,17 @@ export async function POST(req: NextRequest) {
       { status: isNew ? 201 : 200 }
     );
   } catch (e) {
-    // Connection/init failures degrade to 503; anything else is a generic 500.
-    // Match on error *name* and Prisma *code* only — a PrismaClientInit message
-    // can embed the connection string (credentials included), so never log it.
+    // Distinguish an unreachable database (503) from an application/data error
+    // (500). Match on error *name* and Prisma *code* only — a
+    // PrismaClientInitializationError message can embed the connection string
+    // (credentials included), so it is never logged.
     const name = (e as { name?: string })?.name ?? "Error";
     const code = (e as { code?: string })?.code ?? "";
+    const connectionCodes = ["P1001", "P1003", "P1008", "P1009", "P1017", "P1013"];
     const dbDown =
-      name.startsWith("PrismaClient") ||
-      ["P1001", "P1003", "P1008", "P1009", "P1017"].includes(code);
+      name === "PrismaClientInitializationError" ||
+      name === "PrismaClientNetworkRequestError" ||
+      connectionCodes.includes(code);
     console.error(`[api/readings] ${dbDown ? "database unavailable" : "unhandled error"} (${name})`);
     return dbDown ? fail(503, "database_unavailable") : fail(500, "internal_error");
   }
