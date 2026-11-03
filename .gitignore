@@ -41,3 +41,6 @@ next-env.d.ts
 # editor
 .idea
 .vscode
+
+# firmware secrets — never commit Wi-Fi credentials or device tokens
+firmware/**/secrets.h
